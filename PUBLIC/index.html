@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LAN Classroom</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--tx:#1d2433;--mut:#6b7488;--pri:#2f6fed;--red:#d93c3c;--grn:#1f9d55;--bd:#dde2ee}
+@media(prefers-color-scheme:dark){:root{--bg:#12151c;--card:#1c2130;--tx:#e8ecf5;--mut:#98a2b8;--bd:#2c3348}}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
+header{padding:14px 18px;font-weight:700;font-size:20px;border-bottom:1px solid var(--bd);background:var(--card)}
+main{max-width:1100px;margin:auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
+.choose{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+button{font:inherit;border:0;border-radius:10px;padding:11px 16px;background:var(--pri);color:#fff;cursor:pointer;font-weight:600}
+button.red{background:var(--red)}button.grn{background:var(--grn)}button.gray{background:var(--mut)}
+input[type=text],input[type=password]{font:inherit;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);width:100%;margin:8px 0}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.tile{border:2px solid var(--bd);border-radius:12px;overflow:hidden;background:var(--card);cursor:pointer}
+.tile.sel{border-color:var(--pri)}
+.tile .pic{aspect-ratio:16/9;background:#0003;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:13px}
+.tile img{width:100%;height:100%;object-fit:contain}
+.tile .nm{padding:8px 10px;font-weight:600;display:flex;gap:8px;align-items:center}
+.hidden{display:none!important}
+.mut{color:var(--mut);font-size:14px}
+#ovl{position:fixed;inset:0;background:#000;color:#fff;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+#ovl img{max-width:100%;max-height:100%}
+#ovl h1{font-size:34px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:8px;width:min(90%,420px)}
+.t{background:var(--pri);color:#fff;padding:12px 14px;border-radius:10px;box-shadow:0 4px 14px #0004}
+.t a{color:#fff;font-weight:700}
+#alertbox{position:fixed;inset:0;background:#000a;z-index:70;display:flex;align-items:center;justify-content:center}
+#alertbox div{background:var(--card);border:4px solid var(--red);border-radius:14px;padding:24px;max-width:90%;text-align:center}
+</style>
+</head>
+<body>
+<header>🖥️ LAN Classroom</header>
+<main>
+
+<!-- Step 1: choose a role -->
+<section id="home" class="choose">
+  <div class="card"><h2>I'm a Student</h2><p class="mut">Join the class from this PC or phone.</p>
+    <input type="text" id="sname" placeholder="Your name"><button onclick="startStudent()">Join class</button></div>
+  <div class="card"><h2>I'm the Admin</h2><p class="mut">Control and monitor all devices.</p>
+    <input type="password" id="pin" placeholder="Admin PIN"><button class="grn" onclick="startAdmin()">Open control panel</button>
+    <p id="perr" class="mut"></p></div>
+</section>
+
+<!-- Student view -->
+<section id="student" class="hidden">
+  <div class="card"><h2>✅ You are connected</h2><p class="mut" id="sstat">Waiting for instructions from the admin…</p>
+    <div class="bar"><button id="shareBtn" onclick="shareMine()">Share my screen with admin</button>
+    <button id="stopBtn" class="gray hidden" onclick="stopMine()">Stop sharing</button></div>
+    <p class="mut" id="nosupport"></p></div>
+  <div class="card"><b>📤 Send a file</b>
+    <div class="bar"><input type="file" id="sfile" style="max-width:240px">
+    <select id="sto"><option value="admin">To admin only</option><option value="all">To everyone</option></select>
+    <button onclick="sendMine()">Send</button></div><p class="mut" id="sfstat"></p></div>
+</section>
+
+<!-- Admin view -->
+<section id="admin" class="hidden">
+  <div class="card"><b>📲 Invite students</b>
+    <p class="mut">Students scan the QR code with their phone camera, or type the short address in a browser, then press “Join class”.</p>
+    <div class="bar" style="align-items:flex-start"><img id="qr" alt="QR code" width="160" height="160" style="background:#fff;border-radius:8px">
+    <div><div id="inv" style="font-size:22px;font-weight:700;word-break:break-all"></div>
+    <div class="bar"><button class="gray" onclick="copyLink()">Copy link</button><select id="ipsel" onchange="loadInvite(true)"></select></div>
+    <p class="mut" id="cpy"></p></div></div></div>
+  <div class="card">
+    <b>1. Pick devices</b> <span class="mut">(click a tile; none selected = nobody)</span>
+    <div class="bar"><button class="gray" onclick="selAll(true)">Select all</button><button class="gray" onclick="selAll(false)">Clear</button>
+    <span class="mut" id="count"></span></div>
+    <div class="grid" id="grid" style="margin-top:12px"></div>
+  </div>
+  <div class="card">
+    <b>2. Choose an action</b>
+    <input type="text" id="txt" placeholder="Type a message or alert text…">
+    <div class="bar">
+      <button onclick="doMsg('msg')">💬 Send message</button>
+      <button class="red" onclick="doMsg('alert')">🚨 Send alert</button>
+      <button class="red" onclick="cmd({type:'freeze',text:txt.value})">🧊 Freeze screens</button>
+      <button class="grn" onclick="cmd({type:'unfreeze'})">▶️ Unfreeze</button>
+    </div>
+    <div class="bar">
+      <button id="bshare" onclick="shareToStudents()">📡 Share my screen to them</button>
+      <button id="bstop" class="gray hidden" onclick="stopShare()">Stop sharing</button>
+      <input type="file" id="file" style="max-width:260px"><button onclick="sendFile()">📁 Send file</button>
+    </div>
+    <p class="mut" id="astat"></p>
+  </div>
+</section>
+</main>
+
+<div id="ovl" class="hidden"></div>
+<div id="alertbox" class="hidden"><div><h1>🚨 ALERT</h1><p id="atext" style="font-size:22px"></p><button onclick="alertbox.classList.add('hidden')">OK</button></div></div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let ws, role, pin, myName, stream, timer, selected = new Set(), list = [], frames = {}, adminStream, adminTimer;
+
+function connect(onopen) {
+  ws = new WebSocket('wss://' + location.host);
+  ws.onopen = onopen;
+  ws.onmessage = e => handle(JSON.parse(e.data));
+  ws.onclose = () => { if (role) { setTimeout(() => connect(onopen), 2000); } };
+}
+const tx = o => ws.readyState === 1 && ws.send(JSON.stringify(o));
+function toast(html, sticky) { const d = document.createElement('div'); d.className = 't'; d.innerHTML = html; $('toast').append(d); if (!sticky) setTimeout(() => d.remove(), 9000); }
+async function getFile(u, n, el) {
+  try {
+    el.textContent = 'Downloading…';
+    const b = await (await fetch(u)).blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = n;
+    document.body.append(a); a.click(); a.remove();
+    el.textContent = 'Saved ✔ (tap to download again): ' + n;
+  } catch { el.textContent = 'Download failed, tap to retry: ' + n; }
+}
+document.addEventListener('click', e => { const a = e.target.closest('a[data-u]'); if (a) { e.preventDefault(); getFile(a.dataset.u, a.dataset.n, a); } });
+function beep() { try { const c = new AudioContext(), o = c.createOscillator(); o.connect(c.destination); o.frequency.value = 880; o.start(); setTimeout(() => { o.stop(); c.close(); }, 500); } catch {} }
+
+/* ---------- Student ---------- */
+function startStudent() {
+  myName = $('sname').value.trim() || 'Student'; role = 'student';
+  $('home').classList.add('hidden'); $('student').classList.remove('hidden');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    $('shareBtn').classList.add('hidden');
+    $('nosupport').textContent = 'This device/browser cannot share its screen (common on phones), but it still receives messages, alerts and files.';
+  }
+  connect(() => tx({ t: 'hello', name: myName }));
+}
+async function shareMine() {
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const v = document.createElement('video'); v.srcObject = stream; v.muted = true; await v.play();
+    const c = document.createElement('canvas');
+    timer = setInterval(() => {
+      const w = 640, h = Math.round(w * v.videoHeight / v.videoWidth) || 360;
+      c.width = w; c.height = h; c.getContext('2d').drawImage(v, 0, 0, w, h);
+      tx({ t: 'frame', img: c.toDataURL('image/jpeg', 0.5) });
+    }, 1000);
+    stream.getVideoTracks()[0].onended = stopMine;
+    $('shareBtn').classList.add('hidden'); $('stopBtn').classList.remove('hidden');
+  } catch (e) { toast('Screen sharing was cancelled.'); }
+}
+function stopMine() {
+  clearInterval(timer); stream && stream.getTracks().forEach(t => t.stop());
+  tx({ t: 'stopped' }); $('stopBtn').classList.add('hidden'); $('shareBtn').classList.remove('hidden');
+}
+function handle(m) {
+  if (m.t === 'list') { list = m.students; renderGrid(); }
+  else if (m.t === 'frame') { frames[m.id] = m.img; const i = document.querySelector(`[data-id="${m.id}"] img`); if (i) i.src = m.img; else renderGrid(); }
+  else if (m.t === 'ok') { $('home').classList.add('hidden'); $('admin').classList.remove('hidden'); loadInvite(); }
+  else if (m.t === 'you') myToken = m.token;
+  else if (m.t === 'denied') { role = null; $('perr').textContent = 'Wrong PIN.'; }
+  else if (m.t === 'cmd') studentCmd(m.cmd);
+}
+function studentCmd(c) {
+  const o = $('ovl');
+  if (c.type === 'msg') toast('💬 ' + esc(c.text));
+  else if (c.type === 'alert') { $('atext').textContent = c.text; $('alertbox').classList.remove('hidden'); beep(); }
+  else if (c.type === 'freeze') { o.innerHTML = '<h1>🧊 Screen frozen</h1><p>' + esc(c.text || 'Please look at the teacher.') + '</p>'; o.classList.remove('hidden'); }
+  else if (c.type === 'unfreeze' || c.type === 'stopscreen') { o.classList.add('hidden'); o.innerHTML = ''; }
+  else if (c.type === 'screen') { if (!o.querySelector('img')) o.innerHTML = '<img>'; o.querySelector('img').src = c.img; o.classList.remove('hidden'); }
+  else if (c.type === 'file') toast('📁 New file from ' + esc(c.from || 'admin') + ': <a href="#" data-u="' + esc(c.url) + '" data-n="' + esc(c.name) + '">Tap to download ' + esc(c.name) + '</a>', true);
+}
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+/* ---------- Admin ---------- */
+function startAdmin() { pin = $('pin').value; role = 'admin'; connect(() => tx({ t: 'admin', pin })); }
+function renderGrid() {
+  if (role !== 'admin') return;
+  $('count').textContent = list.length + ' device(s) online, ' + [...selected].filter(i => list.some(s => s.id === i)).length + ' selected';
+  $('grid').innerHTML = list.length ? '' : '<p class="mut">No students yet. Ask them to open this address and press “Join class”.</p>';
+  list.forEach(s => {
+    const d = document.createElement('div'); d.className = 'tile' + (selected.has(s.id) ? ' sel' : ''); d.dataset.id = s.id;
+    d.innerHTML = '<div class="pic">' + (frames[s.id] && s.sharing ? '<img src="' + frames[s.id] + '">' : 'Screen not shared') + '</div><div class="nm">' + (selected.has(s.id) ? '☑' : '☐') + ' ' + esc(s.name) + '</div>';
+    d.onclick = () => { selected.has(s.id) ? selected.delete(s.id) : selected.add(s.id); renderGrid(); };
+    $('grid').append(d);
+  });
+}
+function selAll(on) { selected = on ? new Set(list.map(s => s.id)) : new Set(); renderGrid(); }
+function targets() { return [...selected].filter(i => list.some(s => s.id === i)); }
+function cmd(c) {
+  const to = targets(); if (!to.length) return say('Select at least one device first.');
+  tx({ t: 'cmd', to, cmd: c }); say('Sent to ' + to.length + ' device(s).');
+}
+function doMsg(type) { if (!$('txt').value.trim()) return say('Type some text first.'); cmd({ type, text: $('txt').value }); }
+function say(s) { $('astat').textContent = s; }
+async function shareToStudents() {
+  if (!targets().length) return say('Select at least one device first.');
+  try {
+    adminStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const v = document.createElement('video'); v.srcObject = adminStream; v.muted = true; await v.play();
+    const c = document.createElement('canvas');
+    adminTimer = setInterval(() => {
+      const w = 960, h = Math.round(w * v.videoHeight / v.videoWidth) || 540;
+      c.width = w; c.height = h; c.getContext('2d').drawImage(v, 0, 0, w, h);
+      const to = targets(); if (to.length) tx({ t: 'cmd', to, cmd: { type: 'screen', img: c.toDataURL('image/jpeg', 0.55) } });
+    }, 700);
+    adminStream.getVideoTracks()[0].onended = stopShare;
+    $('bshare').classList.add('hidden'); $('bstop').classList.remove('hidden'); say('Sharing your screen…');
+  } catch { say('Screen sharing cancelled.'); }
+}
+function stopShare() {
+  clearInterval(adminTimer); adminStream && adminStream.getTracks().forEach(t => t.stop());
+  tx({ t: 'cmd', to: 'all', cmd: { type: 'stopscreen' } });
+  $('bstop').classList.add('hidden'); $('bshare').classList.remove('hidden'); say('Stopped sharing.');
+}
+async function sendFile() {
+  const f = $('file').files[0]; if (!f) return say('Choose a file first.');
+  if (!targets().length) return say('Select at least one device first.');
+  say('Uploading…');
+  const r = await fetch('/upload?name=' + encodeURIComponent(f.name), { method: 'POST', headers: { 'x-pin': pin }, body: f });
+  if (!r.ok) return say('Upload failed.');
+  const j = await r.json(); cmd({ type: 'file', name: j.name, url: j.url });
+}
+let myToken, inviteUrls = [];
+async function sendMine() {
+  const f = $('sfile').files[0]; if (!f) return $('sfstat').textContent = 'Choose a file first.';
+  $('sfstat').textContent = 'Uploading…';
+  try {
+    const r = await fetch('/upload?name=' + encodeURIComponent(f.name), { method: 'POST', headers: { 'x-token': myToken }, body: f });
+    if (!r.ok) throw 0;
+    const j = await r.json(); tx({ t: 'share', name: j.name, url: j.url, to: $('sto').value });
+    $('sfstat').textContent = 'Sent ✔ ' + j.name;
+  } catch { $('sfstat').textContent = 'Upload failed. Try again.'; }
+}
+async function loadInvite(keep) {
+  if (!keep) {
+    inviteUrls = (await (await fetch('/api/info')).json()).urls;
+    $('ipsel').innerHTML = inviteUrls.map(u => '<option>' + esc(u) + '</option>').join('');
+  }
+  const u = $('ipsel').value || location.origin; $('inv').textContent = u;
+  $('qr').src = '/qr.svg?t=' + encodeURIComponent(u + '/?join');
+}
+function copyLink() {
+  const u = $('inv').textContent;
+  (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => $('cpy').textContent = 'Copied!').catch(() => $('cpy').textContent = 'Select and copy the address above.');
+}
+if (location.search.includes('join')) document.querySelector('#home .card:nth-child(2)').classList.add('hidden');
+</script>
+</body>
+</html>
